@@ -92,6 +92,13 @@ st.markdown(
     div.stButton > button[kind="secondary"], .stButton > button, .stDownloadButton > button { background:#FFD400 !important; color:#0A0A0A !important; border:1px solid #0A0A0A !important; border-radius:12px !important; font-weight:900 !important; box-shadow:0 6px 18px rgba(255,212,0,.25) !important; }
     .stDownloadButton > button { min-height:56px !important; font-size:18px !important; }
     div[data-testid="stDataFrame"] { border: 1px solid #e0e4e9; border-radius: 14px; box-shadow:0 5px 18px rgba(15,23,42,.08); }
+    .pas-unmatched-pill { display:inline-flex; align-items:center; gap:8px; background:#FFD400 !important; color:#0A0A0A !important; border:0 !important; border-radius:14px 14px 0 0 !important; padding:13px 20px !important; font-size:18px; font-weight:950; box-shadow:0 4px 14px rgba(0,0,0,.09); margin-top:8px; }
+    .pas-table-wrap { background:#fff !important; border:1px solid #e0e4e9 !important; border-radius:0 16px 16px 16px !important; max-height:430px !important; overflow:auto !important; box-shadow:0 7px 25px rgba(15,23,42,.10) !important; margin-bottom:18px; }
+    table.pas-table { width:100%; border-collapse:collapse; font-size:14px !important; color:#0A0A0A !important; background:#fff; }
+    table.pas-table thead th { background:#FFD400 !important; color:#0A0A0A !important; border:1px solid #e2ba00 !important; padding:12px 14px !important; font-weight:950 !important; text-align:left; position:sticky; top:0; z-index:5; white-space:nowrap; }
+    table.pas-table tbody td { background:#fff !important; color:#0A0A0A !important; border:1px solid #e1e5eb !important; padding:10px 14px !important; vertical-align:top; }
+    table.pas-table tbody tr:nth-child(even) td { background:#fbfcfd !important; }
+    .pas-note { color:#0A0A0A !important; font-size:13px; margin:8px 0 16px 0; }
 
     .pas-bottom-chase-wrap { position: fixed; left: calc(18rem + 22px); right: 42px; bottom: 12px; height: 58px; pointer-events: none; z-index: 1; overflow: hidden; }
     .pas-bottom-ground { position: absolute; left: 0; right: 0; bottom: 6px; border-bottom: 1px solid rgba(0,0,0,0.11); }
@@ -148,7 +155,7 @@ with st.sidebar:
         <div class="pas-nav-row"><span class="pas-nav-icon"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></span><span>Download Excel<br>Report</span></div>
         <div class="pas-nav-row"><span class="pas-nav-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg></span><span>Smoke Crack</span></div>
         <div class="pas-sidebar-rule"></div>
-        <div class="pas-sidebar-footer">PAS NW Ltd • v1.0 Prototype Build</div>
+        <div class="pas-sidebar-footer">PAS NW Ltd • v1.1 Visual Rebuild</div>
         """,
         unsafe_allow_html=True,
     )
@@ -157,7 +164,7 @@ st.markdown(
     """
     <div class="pas-hero">
       <div class="pas-hero-logo">PAS</div>
-      <div class="pas-hero-text">PAS Live Cost Dashboard<span class="pas-hero-dot">•</span><span class="pas-hero-version">v1.0 Prototype Build</span></div>
+      <div class="pas-hero-text">PAS Live Cost Dashboard<span class="pas-hero-dot">•</span><span class="pas-hero-version">v1.1 Visual Rebuild</span></div>
     </div>
     """,
     unsafe_allow_html=True,
@@ -734,6 +741,22 @@ def format_currency(v):
         return "£0"
 
 
+
+
+def html_table(df, max_rows=200):
+    """Render a dataframe with the same PAS yellow-header table styling as the other PAS apps."""
+    if df is None or df.empty:
+        return "<div class='pas-note'>No records to show.</div>"
+    view = df.head(max_rows).copy()
+    headers = ''.join(f"<th>{str(col)}</th>" for col in view.columns)
+    rows = []
+    for _, row in view.iterrows():
+        cells = ''.join(f"<td>{'' if pd.isna(val) else str(val)}</td>" for val in row.tolist())
+        rows.append(f"<tr>{cells}</tr>")
+    extra = "" if len(df) <= max_rows else f"<div class='pas-note'>Showing first {max_rows:,} of {len(df):,} rows.</div>"
+    return f"<div class='pas-table-wrap'><table class='pas-table'><thead><tr>{headers}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>{extra}"
+
+
 def build_summary(actuals, forecast, sites):
     actual_pivot = actuals.pivot_table(index="Job", columns="Category", values="Cost", aggfunc="sum", fill_value=0).reset_index() if not actuals.empty else pd.DataFrame(columns=["Job"])
     forecast_pivot = forecast.copy()
@@ -891,7 +914,7 @@ for col, label, value in [
             unsafe_allow_html=True,
         )
 
-st.markdown("<div class='section-title'>Site Summary</div>", unsafe_allow_html=True)
+st.markdown("<div class='pas-unmatched-pill'>Site Summary</div>", unsafe_allow_html=True)
 # Keep the on-screen summary concise. The Excel export contains the full forecast/actual detail.
 summary_display_cols = ["Job", "Site", "Overall Forecast", "Actual Cost", "Live Variance", "Profit", "Profit %"]
 summary_display = summary[summary_display_cols].copy()
@@ -900,7 +923,7 @@ for c in summary_display.columns:
         summary_display[c] = summary_display[c].map(lambda x: f"{x:.1%}" if pd.notna(x) else "")
     elif c not in ["Job", "Site"]:
         summary_display[c] = summary_display[c].map(format_currency)
-st.dataframe(summary_display, use_container_width=True, hide_index=True)
+st.markdown(html_table(summary_display), unsafe_allow_html=True)
 
 st.markdown("<div class='section-title'>S-Curve: Cumulative Actual Cost</div>", unsafe_allow_html=True)
 if not monthly.empty:
@@ -917,26 +940,26 @@ if not monthly.empty:
         labels={"value": "Cost", "Month Label": "Month", "variable": "Measure"},
         title="Cumulative Actual vs Overall Forecast",
     )
-    fig.update_layout(legend_title_text="", hovermode="x unified")
+    fig.update_layout(legend_title_text="", hovermode="x unified", paper_bgcolor="white", plot_bgcolor="white", title_font=dict(size=22, color="#0A0A0A"), font=dict(color="#0A0A0A"), margin=dict(l=20,r=20,t=60,b=20))
     st.plotly_chart(fig, use_container_width=True)
 else:
     st.warning("No monthly costs found to build an S-curve.")
 
 left, right = st.columns([2, 1])
 with left:
-    st.markdown("<div class='section-title'>Monthly Breakdown</div>", unsafe_allow_html=True)
+    st.markdown("<div class='pas-unmatched-pill'>Monthly Breakdown</div>", unsafe_allow_html=True)
     if not monthly.empty:
         monthly_display = monthly.copy()
         monthly_display["Month"] = monthly_display["Month"].dt.strftime("%d/%m/%Y")
         monthly_display["Cost"] = monthly_display["Cost"].map(format_currency)
-        st.dataframe(monthly_display, use_container_width=True, hide_index=True)
+        st.markdown(html_table(monthly_display), unsafe_allow_html=True)
 with right:
-    st.markdown("<div class='section-title'>Issues</div>", unsafe_allow_html=True)
+    st.markdown("<div class='pas-unmatched-pill'>Issues</div>", unsafe_allow_html=True)
     issue_df = pd.DataFrame(issues)
     if issue_df.empty:
         st.success("No issues found.")
     else:
-        st.dataframe(issue_df, use_container_width=True, hide_index=True)
+        st.markdown(html_table(issue_df), unsafe_allow_html=True)
 
 st.markdown("<div class='section-title'>Download Report</div>", unsafe_allow_html=True)
 export_bytes = excel_export(summary, monthly, actuals, issues)
@@ -953,4 +976,4 @@ with st.expander("Raw imported cost records"):
         raw_display["Cost Date"] = pd.to_datetime(raw_display["Cost Date"], errors="coerce").dt.strftime("%d/%m/%Y")
         raw_display["Month"] = pd.to_datetime(raw_display["Month"], errors="coerce").dt.strftime("%d/%m/%Y")
         raw_display["Cost"] = raw_display["Cost"].map(format_currency)
-    st.dataframe(raw_display, use_container_width=True, hide_index=True)
+    st.markdown(html_table(raw_display, max_rows=500), unsafe_allow_html=True)
