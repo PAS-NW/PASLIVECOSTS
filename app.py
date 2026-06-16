@@ -1,6 +1,7 @@
 import calendar
 from datetime import date, datetime, timedelta
 from io import BytesIO
+from pathlib import Path
 import re
 
 import numpy as np
@@ -19,63 +20,196 @@ import streamlit as st
 
 st.set_page_config(
     page_title="PAS Live Cost Dashboard",
-    page_icon="🏗️",
+    page_icon="pas_logo.png",
     layout="wide",
 )
 
-PAS_YELLOW = "#ffd400"
-PAS_BLACK = "#111111"
-PAS_GREY = "#f4f4f4"
+PAS_YELLOW = "#FFD400"
+PAS_BLACK = "#0A0A0A"
+PAS_DARK = "#171717"
+PAS_GREY = "#F4F4F4"
 
 st.markdown(
-    f"""
+    """
     <style>
-        .main {{ background-color: #ffffff; }}
-        .block-container {{ padding-top: 1.5rem; padding-bottom: 2rem; }}
-        .pas-hero {{
-            background: linear-gradient(135deg, #111111 0%, #2d2d2d 100%);
-            border-left: 10px solid {PAS_YELLOW};
-            padding: 24px 28px;
-            border-radius: 18px;
-            color: white;
-            margin-bottom: 18px;
-        }}
-        .pas-hero h1 {{ margin: 0; font-size: 2.2rem; font-weight: 800; }}
-        .pas-hero p {{ margin: 8px 0 0 0; color: #e6e6e6; font-size: 1rem; }}
-        .kpi-card {{
-            background: #111111;
-            color: white;
-            border-radius: 16px;
-            padding: 20px 18px;
-            min-height: 118px;
-            border-bottom: 6px solid #ffd400;
-        }}
-        .kpi-label {{ font-size: 0.85rem; color: #d7d7d7; margin-bottom: 8px; }}
-        .kpi-value {{ font-size: 1.7rem; font-weight: 800; }}
-        .section-title {{
-            background: #ffd400;
-            color: #111111;
-            padding: 10px 14px;
-            border-radius: 10px;
-            font-weight: 800;
-            margin-top: 10px;
-            margin-bottom: 10px;
-        }}
-        div[data-testid="stDataFrame"] {{ border: 1px solid #e6e6e6; border-radius: 10px; }}
+    .stApp { background: #f7f8fa !important; color: #0A0A0A !important; font-family: Inter, "Segoe UI", Arial, sans-serif; }
+    .block-container { max-width: 1580px !important; padding-top: 1.05rem !important; padding-left: 2rem !important; padding-right: 2rem !important; padding-bottom: 2rem !important; }
+
+    section[data-testid="stSidebar"] { background: linear-gradient(180deg, #050606 0%, #0b1015 100%) !important; border-right: 1px solid #161b22; }
+    section[data-testid="stSidebar"] * { color: white; }
+    section[data-testid="stSidebar"] > div:first-child { padding-top: 1.05rem !important; }
+    section[data-testid="stSidebar"] img { border-radius: 14px !important; box-shadow: 0 10px 24px rgba(0,0,0,.26); }
+    .pas-sidebar-title { color:#fff; font-size:18px; font-weight:950; line-height:1.15; text-align:center; margin: 20px 0 8px; }
+    .pas-yellow-line { width:72px; height:4px; background:#FFD400; border-radius:99px; margin: 0 auto 22px; }
+    .pas-sidebar-copy { color:#fff !important; font-size:14px; line-height:1.52; font-weight:650; margin-bottom:24px; }
+    .pas-sidebar-rule { border-top:1px solid rgba(255,255,255,.22); margin:22px 0; }
+    .pas-sidebar-heading { color:#FFD400; font-size:19px; font-weight:950; margin: 0 0 16px; }
+    .pas-nav-row { display:grid; grid-template-columns: 26px 1fr; gap:10px; align-items:start; margin: 15px 0; color:#fff; font-weight:750; line-height:1.25; font-size:14px; }
+    .pas-nav-icon svg { width:21px; height:21px; stroke:#FFD400; stroke-width:2.4; fill:none; stroke-linecap:round; stroke-linejoin:round; }
+    .pas-sidebar-footer { color:#fff; font-size:12px; font-weight:800; margin-top:28px; }
+
+    .pas-hero { display:flex; align-items:center; gap:16px; background: linear-gradient(100deg, #08090b 0%, #151718 70%, #c9aa00 130%) !important; border-radius: 16px !important; padding: 12px 22px !important; margin: 0 0 18px 0 !important; box-shadow: 0 9px 25px rgba(0,0,0,.13) !important; min-height:60px; }
+    .pas-hero-logo { width:37px; height:37px; border-radius:7px; background:#FFD400; color:#000; display:inline-flex; align-items:center; justify-content:center; font-weight:950; font-size:14px; letter-spacing:-1px; }
+    .pas-hero-text { color:#fff; font-size:18px; font-weight:950; letter-spacing:-.02em; }
+    .pas-hero-dot { color:#fff; opacity:.8; margin: 0 7px; }
+    .pas-hero-version { color:#FFD400; font-weight:950; }
+
+    .pas-upload-card { background:#fff; border:1px solid #e5e7eb; border-radius:18px; box-shadow:0 5px 18px rgba(15,23,42,.08); padding:16px 18px 14px; margin-bottom:14px; }
+    .pas-upload-title { color:#0A0A0A; font-size:16px; font-weight:950; margin-bottom:10px; }
+    div[data-testid="stFileUploader"] { margin:0 !important; }
+    div[data-testid="stFileUploader"] label { display:none !important; }
+    div[data-testid="stFileUploaderDropzone"] { background: transparent !important; border: 0 !important; padding: 0 !important; min-height: 0 !important; }
+    div[data-testid="stFileUploaderDropzoneInstructions"] { display: none !important; }
+    div[data-testid="stFileUploader"] section { background: transparent !important; border: 0 !important; min-height: 0 !important; padding: 0 !important; }
+    div[data-testid="stFileUploader"] button {
+        background: #ffffff !important;
+        color: #0A0A0A !important;
+        border: 1px solid #d7dce3 !important;
+        border-radius: 10px !important;
+        font-weight: 900 !important;
+        min-height: 44px !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,.06) !important;
+    }
+    div[data-testid="stFileUploader"] button * { color:#0A0A0A !important; fill:#0A0A0A !important; stroke:#0A0A0A !important; }
+    div[data-testid="stFileUploader"] [data-testid="stFileUploaderFile"] { display: none !important; }
+    .pas-file-card { display:flex; align-items:center; gap:14px; background:#f4f6f8; border:1px solid #dfe4ea; border-radius:12px; padding:11px 14px; min-height:54px; margin: 4px 0 12px; }
+    .pas-file-icon { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:950; font-size:11px; box-shadow:0 2px 8px rgba(0,0,0,.12); flex:none; background:#118a3b; }
+    .pas-file-main { flex:1; min-width:0; }
+    .pas-file-name { color:#0A0A0A; font-weight:950; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .pas-file-size { color:#4b5563; font-weight:650; font-size:13px; margin-top:2px; }
+    .pas-file-check { width:24px; height:24px; border-radius:50%; background:#108a37; color:white; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:950; flex:none; }
+
+    .kpi-card { background:#fff !important; border-radius:18px !important; border:1px solid #e4e7eb !important; box-shadow:0 5px 20px rgba(15,23,42,.08) !important; min-height:118px !important; padding:18px 22px !important; }
+    .kpi-card { display:flex !important; align-items:center !important; gap:18px !important; }
+    .kpi-icon { width:64px; height:64px; border-radius:50%; background:#fff5bd; display:flex; align-items:center; justify-content:center; flex:none; }
+    .kpi-icon svg { width:35px; height:35px; stroke:#0A0A0A; stroke-width:2.5; fill:none; stroke-linecap:round; stroke-linejoin:round; }
+    .kpi-text { min-width:0; }
+    .upload-grid-title { color:#0A0A0A; font-size:28px; font-weight:950; margin: 22px 0 12px; }
+    .kpi-label { color:#111 !important; font-size:15px !important; font-weight:950 !important; margin:0 0 3px !important; }
+    .kpi-value { color:#e9b900 !important; font-size:34px !important; line-height:1.05 !important; font-weight:950 !important; text-shadow:none !important; }
+
+    .section-title, .pas-results-title { color:#0A0A0A !important; font-size:24px !important; font-weight:950 !important; margin: 22px 0 8px !important; background: transparent !important; padding:0 !important; }
+    div.stButton > button[kind="secondary"], .stButton > button, .stDownloadButton > button { background:#FFD400 !important; color:#0A0A0A !important; border:1px solid #0A0A0A !important; border-radius:12px !important; font-weight:900 !important; box-shadow:0 6px 18px rgba(255,212,0,.25) !important; }
+    .stDownloadButton > button { min-height:56px !important; font-size:18px !important; }
+    div[data-testid="stDataFrame"] { border: 1px solid #e0e4e9; border-radius: 14px; box-shadow:0 5px 18px rgba(15,23,42,.08); }
+
+    .pas-bottom-chase-wrap { position: fixed; left: calc(18rem + 22px); right: 42px; bottom: 12px; height: 58px; pointer-events: none; z-index: 1; overflow: hidden; }
+    .pas-bottom-ground { position: absolute; left: 0; right: 0; bottom: 6px; border-bottom: 1px solid rgba(0,0,0,0.11); }
+    .pas-chase-pack { position: absolute; bottom: 8px; left: -150px; width: 150px; height: 48px; animation: pas-chase-run 13s linear 1 forwards; }
+    @keyframes pas-chase-run { 0% { transform: translateX(-120px); opacity: 0; } 8% { opacity: 1; } 88% { opacity: 1; } 100% { transform: translateX(calc(100vw - 90px)); opacity: 0; } }
+    .pas-truck-mini { position: absolute; left: 0; bottom: 5px; width: 54px; height: 30px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.22)); }
+    .pas-truck-bed { position: absolute; left: 0; top: 5px; width: 34px; height: 19px; background: #FFD400; border: 3px solid #0A0A0A; border-radius: 4px 2px 3px 5px; transform: skewX(-10deg); }
+    .pas-truck-logo { position: absolute; left: 7px; top: 9px; font-size: 9px; font-weight: 950; color: #0A0A0A; line-height: 1; z-index: 3; }
+    .pas-truck-cab { position: absolute; left: 30px; top: 7px; width: 19px; height: 18px; background: #FFD400; border: 3px solid #0A0A0A; border-radius: 3px 5px 3px 2px; z-index: 2; }
+    .pas-truck-window { position: absolute; left: 34px; top: 10px; width: 7px; height: 7px; background: #a8d8e8; border: 2px solid #0A0A0A; border-radius: 2px; z-index: 4; }
+    .pas-truck-nose { position: absolute; left: 47px; top: 17px; width: 8px; height: 8px; background: #FFD400; border: 3px solid #0A0A0A; border-left: none; border-radius: 0 3px 3px 0; }
+    .pas-wheel { position: absolute; bottom: 0; width: 9px; height: 9px; background: #0A0A0A; border: 2px solid #222; border-radius: 50%; animation: pas-wheel-spin .32s linear infinite; z-index: 5; }
+    .pas-wheel::after { content: ""; position: absolute; inset: 2px; background: #FFD400; border-radius: 50%; }
+    .pas-wheel.back { left: 13px; } .pas-wheel.front { left: 41px; }
+    @keyframes pas-wheel-spin { to { transform: rotate(360deg); } }
+    .pas-speed-lines { position: absolute; left: -30px; top: 17px; width: 24px; height: 18px; }
+    .pas-speed-lines span { display:block; height:2px; background:#b9b9b9; margin:4px 0; border-radius:2px; animation: pas-flicker .55s linear infinite; }
+    .pas-speed-lines span:nth-child(2) { width: 16px; margin-left: 8px; } .pas-speed-lines span:nth-child(3) { width: 11px; margin-left: 13px; }
+    @keyframes pas-flicker { 50% { opacity:.25; transform: translateX(-5px); } }
+    .pas-dust { position:absolute; left:-5px; bottom:0; width:34px; height:14px; opacity:.75; }
+    .pas-dust span { position:absolute; bottom:0; background:#dac6a9; border-radius:50%; animation: pas-dust 1s linear infinite; }
+    .pas-dust span:nth-child(1) { width:12px; height:6px; left:0; } .pas-dust span:nth-child(2) { width:16px; height:7px; left:10px; animation-delay:.2s; } .pas-dust span:nth-child(3) { width:11px; height:5px; left:23px; animation-delay:.4s; }
+    @keyframes pas-dust { 50% { transform: translateX(-8px) scale(1.15); opacity:.4; } }
+    .pas-stickman { position: absolute; left: 92px; bottom: 5px; width: 28px; height: 34px; animation: pas-runner-bob .35s ease-in-out infinite alternate; }
+    @keyframes pas-runner-bob { from { transform: translateY(1px); } to { transform: translateY(-2px); } }
+    .pas-stick-head { position:absolute; top:0; left:11px; width:8px; height:8px; border:2px solid #111; border-radius:50%; background:white; }
+    .pas-stick-body { position:absolute; left:15px; top:9px; width:2px; height:13px; background:#111; transform: rotate(12deg); transform-origin:top; }
+    .pas-stick-arm-a, .pas-stick-arm-b, .pas-stick-leg-a, .pas-stick-leg-b { position:absolute; width:2px; height:12px; background:#111; transform-origin:top; border-radius:2px; }
+    .pas-stick-arm-a { left:15px; top:11px; transform: rotate(58deg); animation: pas-arm-a .35s linear infinite alternate; }
+    .pas-stick-arm-b { left:15px; top:11px; transform: rotate(-50deg); animation: pas-arm-b .35s linear infinite alternate; }
+    .pas-stick-leg-a { left:16px; top:21px; height:14px; transform: rotate(48deg); animation: pas-leg-a .35s linear infinite alternate; }
+    .pas-stick-leg-b { left:16px; top:21px; height:14px; transform: rotate(-42deg); animation: pas-leg-b .35s linear infinite alternate; }
+    @keyframes pas-arm-a { to { transform: rotate(-45deg); } } @keyframes pas-arm-b { to { transform: rotate(55deg); } } @keyframes pas-leg-a { to { transform: rotate(-45deg); } } @keyframes pas-leg-b { to { transform: rotate(48deg); } }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
+with st.sidebar:
+    try:
+        st.image("pas_logo.png", use_column_width=True)
+    except Exception:
+        st.markdown("<div style='background:#FFD400;color:#000;font-weight:950;text-align:center;border-radius:14px;padding:18px;'>PAS</div>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="pas-sidebar-title">PAS Live<br>Cost Dashboard</div>
+        <div class="pas-yellow-line"></div>
+        <div class="pas-sidebar-copy">Upload the four weekly cost spreadsheets, then build a live forecast vs actual report by site.</div>
+        <div class="pas-sidebar-rule"></div>
+        <div class="pas-sidebar-heading">Instructions</div>
+        <div class="pas-nav-row"><span class="pas-nav-icon"><svg viewBox="0 0 24 24"><path d="M16 16l-4-4-4 4"/><path d="M12 12v9"/><path d="M20 16.6A5 5 0 0 0 18 7h-1.3A8 8 0 1 0 4 15.3"/></svg></span><span>Upload Materials & Plant<br>Spreadsheet</span></div>
+        <div class="pas-nav-row"><span class="pas-nav-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h6"/></svg></span><span>Upload Vehicles, Labour<br>and Forecast sheets</span></div>
+        <div class="pas-nav-row"><span class="pas-nav-icon"><svg viewBox="0 0 24 24"><path d="M5 3l14 9-14 9V3z"/></svg></span><span>Build Live Cost<br>Dashboard</span></div>
+        <div class="pas-nav-row"><span class="pas-nav-icon"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></span><span>Download Excel<br>Report</span></div>
+        <div class="pas-nav-row"><span class="pas-nav-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg></span><span>Smoke Crack</span></div>
+        <div class="pas-sidebar-rule"></div>
+        <div class="pas-sidebar-footer">PAS NW Ltd • v1.0 Prototype Build</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 st.markdown(
     """
     <div class="pas-hero">
-        <h1>PAS Live Cost Dashboard</h1>
-        <p>Upload the four weekly cost files to build a site-by-site forecast vs actual dashboard and Excel report.</p>
+      <div class="pas-hero-logo">PAS</div>
+      <div class="pas-hero-text">PAS Live Cost Dashboard<span class="pas-hero-dot">•</span><span class="pas-hero-version">v1.0 Prototype Build</span></div>
     </div>
     """,
     unsafe_allow_html=True,
 )
+
+
+def render_bottom_chase():
+    st.markdown(
+        """
+        <div class="pas-bottom-chase-wrap" aria-hidden="true">
+            <div class="pas-bottom-ground"></div>
+            <div class="pas-chase-pack">
+                <div class="pas-speed-lines"><span></span><span></span><span></span></div>
+                <div class="pas-dust"><span></span><span></span><span></span></div>
+                <div class="pas-truck-mini">
+                    <div class="pas-truck-bed"></div><div class="pas-truck-logo">PAS</div><div class="pas-truck-cab"></div><div class="pas-truck-window"></div><div class="pas-truck-nose"></div><div class="pas-wheel back"></div><div class="pas-wheel front"></div>
+                </div>
+                <div class="pas-stickman"><div class="pas-stick-head"></div><div class="pas-stick-body"></div><div class="pas-stick-arm-a"></div><div class="pas-stick-arm-b"></div><div class="pas-stick-leg-a"></div><div class="pas-stick-leg-b"></div></div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_file_card(uploaded_file):
+    if not uploaded_file:
+        return
+    size_kb = getattr(uploaded_file, "size", 0) / 1024
+    st.markdown(
+        f"""
+        <div class="pas-file-card">
+            <div class="pas-file-icon">XLS</div>
+            <div class="pas-file-main">
+                <div class="pas-file-name">{uploaded_file.name}</div>
+                <div class="pas-file-size">{size_kb:,.1f} KB</div>
+            </div>
+            <div class="pas-file-check">✓</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def upload_card(title, key):
+    st.markdown(f'<div class="pas-upload-card"><div class="pas-upload-title">{title}</div>', unsafe_allow_html=True)
+    uploaded = st.file_uploader(title, type=["xlsx", "xlsm", "xls"], key=key, label_visibility="collapsed")
+    render_file_card(uploaded)
+    st.markdown('</div>', unsafe_allow_html=True)
+    return uploaded
+
+render_bottom_chase()
 
 COST_CATEGORIES = [
     "Labour",
@@ -702,17 +836,22 @@ def excel_export(summary, monthly, raw, issues):
     return output
 
 
-with st.sidebar:
-    st.markdown("### Upload weekly files")
-    material_file = st.file_uploader("1. Materials & Plant Orders", type=["xlsx", "xlsm", "xls"], key="materials")
-    labour_file = st.file_uploader("2. Labour Cost Sheet", type=["xlsx", "xlsm", "xls"], key="labour")
-    vehicle_file = st.file_uploader("3. Vehicle Sheet", type=["xlsx", "xlsm", "xls"], key="vehicles")
-    forecast_file = st.file_uploader("4. Forecast Template", type=["xlsx", "xlsm", "xls"], key="forecast")
-    report_date = st.date_input("Report / upload date", value=date.today())
-    st.caption("Plant with no off-hire date and vehicles with no end date are costed up to this date.")
+st.markdown('<div class="upload-grid-title">Upload Weekly Files</div>', unsafe_allow_html=True)
+u1, u2, u3, u4 = st.columns(4)
+with u1:
+    material_file = upload_card("Materials & Plant Spreadsheet", "materials")
+with u2:
+    vehicle_file = upload_card("Vehicles Spreadsheet", "vehicles")
+with u3:
+    labour_file = upload_card("Labour Spreadsheet", "labour")
+with u4:
+    forecast_file = upload_card("Forecast Spreadsheet", "forecast")
+
+report_date = st.date_input("Report / upload date", value=date.today())
+st.caption("Plant with no off-hire date and vehicles with no end date are costed up to this date.")
 
 if not all([material_file, labour_file, forecast_file]):
-    st.info("Upload the Materials & Plant Orders, Labour Cost Sheet and Forecast Template to build the dashboard. Vehicle Sheet is optional for first testing, but needed for vehicle and fuel card costs.")
+    st.info("Upload the Materials & Plant Spreadsheet, Labour Spreadsheet and Forecast Spreadsheet to build the dashboard. Vehicles Spreadsheet is optional for first testing, but needed for vehicle and fuel card costs.")
     st.stop()
 
 issues = []
@@ -734,6 +873,12 @@ profit_total = summary["Profit"].sum() if not summary.empty else 0
 variance_total = summary["Live Variance"].sum() if not summary.empty else 0
 
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+kpi_icons = {
+    "Overall Forecast": "<svg viewBox='0 0 24 24'><path d='M3 3v18h18'/><path d='M7 15l4-4 3 3 5-7'/></svg>",
+    "Actual Cost": "<svg viewBox='0 0 24 24'><path d='M12 1v22'/><path d='M17 5H9.5a3.5 3.5 0 0 0 0 7H14.5a3.5 3.5 0 0 1 0 7H6'/></svg>",
+    "Forecast Profit": "<svg viewBox='0 0 24 24'><path d='M12 20V10'/><path d='M18 20V4'/><path d='M6 20v-6'/></svg>",
+    "Live Variance": "<svg viewBox='0 0 24 24'><path d='M4 17l6-6 4 4 6-8'/><path d='M14 7h6v6'/></svg>",
+}
 for col, label, value in [
     (kpi1, "Overall Forecast", forecast_total),
     (kpi2, "Actual Cost", actual_total),
@@ -741,7 +886,10 @@ for col, label, value in [
     (kpi4, "Live Variance", variance_total),
 ]:
     with col:
-        st.markdown(f"<div class='kpi-card'><div class='kpi-label'>{label}</div><div class='kpi-value'>{format_currency(value)}</div></div>", unsafe_allow_html=True)
+        st.markdown(
+            f"<div class='kpi-card'><div class='kpi-icon'>{kpi_icons[label]}</div><div class='kpi-text'><div class='kpi-label'>{label}</div><div class='kpi-value'>{format_currency(value)}</div></div></div>",
+            unsafe_allow_html=True,
+        )
 
 st.markdown("<div class='section-title'>Site Summary</div>", unsafe_allow_html=True)
 # Keep the on-screen summary concise. The Excel export contains the full forecast/actual detail.
